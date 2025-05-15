@@ -2,7 +2,7 @@ import os
 import telebot
 from telebot.types import ReplyKeyboardMarkup, KeyboardButton
 from openai import OpenAI
-from datetime import datetime
+from datetime import datetime, timedelta
 import requests
 import schedule
 import time
