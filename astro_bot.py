@@ -2,7 +2,7 @@ import os
 import telebot
 from telebot.types import ReplyKeyboardMarkup, KeyboardButton
 from openai import OpenAI
-from datetime import datetime, timedelta
+from datetime import datetime
 import requests
 import schedule
 import time
@@ -76,36 +76,18 @@ def get_moon_sign():
     index = int(lon // 30)
     return signs[index]
 
-def get_retrograde_planets():
-    ts = load.timescale()
-    t = ts.now()
-    eph = load('de421.bsp')
-    retrograde_planets = []
-
-    for planet_name in ["mercury", "venus", "mars", "jupiter", "saturn", "uranus", "neptune", "pluto"]:
-        planet = eph[planet_name]
-        now = eph['earth'].at(t).observe(planet).apparent()
-        future = eph['earth'].at(ts.utc(t.utc_datetime() + timedelta(hours=1))).observe(planet).apparent()
-        if future.position.au[0] < now.position.au[0]:
-            retrograde_planets.append(planet_name.capitalize())
-
-    return retrograde_planets
-
 
 # === Генерация совета ===
 
 def generate_advice(sign):
     moon_phase = get_moon_phase()
     moon_sign = get_moon_sign()
-    retrogrades = get_retrograde_planets()
-    retrograde_str = ', '.join(retrogrades) if retrogrades else 'нет ретроградных планет'
 
     prompt = (
         f"Ты — опытный астролог. Сегодня {datetime.now().strftime('%d.%m.%Y')}. "
         f"Фаза Луны: {moon_phase}. Луна в знаке {moon_sign}. "
-        f"Ретроградные планеты: {retrograde_str}. "
-        f"Составь душевный, мудрый, но простой астрологический совет на 3–4 предложения для знака {sign}, "
-        f"учитывая всё вышеуказанное. Избегай сложной терминологии и пиши на языке, понятном обычному человеку."
+        f"Составь мудрый, вдохновляющий и краткий совет для знака {sign} (3–4 предложения), "
+        f"учитывая эмоциональный фон дня. Пиши легко, понятно и красиво."
     )
 
     try:
