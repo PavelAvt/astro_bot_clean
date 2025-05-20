@@ -7,13 +7,14 @@ import requests
 import schedule
 import time
 from skyfield.api import load
-from database import add_user, get_all_users
+from database import add_user, get_all_users, update_user_activity, set_user_sign
 
 # === Настройки ===
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 CHANNEL_LINK = "https://t.me/+lqPB3ppoz7EzMWFi"
 CHANNEL_NAME = "Астрологинеss"
+ADMIN_ID = [5197052541, 673687798]  # ← Замени на свой Telegram ID
 
 bot = telebot.TeleBot(BOT_TOKEN)
 openai_client = OpenAI(api_key=OPENAI_API_KEY)
@@ -69,10 +70,7 @@ def get_moon_sign():
     observer = earth.at(t).observe(moon).apparent()
     lon = observer.ecliptic_latlon()[1].degrees
 
-    signs = [
-        "Овен", "Телец", "Близнецы", "Рак", "Лев", "Дева",
-        "Весы", "Скорпион", "Стрелец", "Козерог", "Водолей", "Рыбы"
-    ]
+    signs = zodiac_signs
     index = int(lon // 30)
     return signs[index]
 
@@ -105,13 +103,18 @@ def generate_advice(sign):
 
 @bot.message_handler(commands=["start"])
 def start(message):
-    bot.send_message(message.chat.id, "Привет! Выбери свой знак зодиака ✨", reply_markup=menu)
+    chat_id = message.chat.id
+    add_user(chat_id, message.from_user.username, message.from_user.first_name)
+    bot.send_message(chat_id, "Привет! Выбери свой знак зодиака ✨", reply_markup=menu)
 
 @bot.message_handler(func=lambda msg: msg.text in zodiac_signs)
 def zodiac_handler(message):
     sign = message.text
     chat_id = message.chat.id
     today = datetime.now().date().isoformat()
+
+    set_user_sign(chat_id, sign)
+    update_user_activity(chat_id, today)
 
     if chat_id in user_data and user_data[chat_id]["date"] == today:
         bot.send_message(chat_id,
@@ -127,12 +130,32 @@ def zodiac_handler(message):
         parse_mode="HTML"
     )
 
+@bot.message_handler(commands=["stats"])
+def stats(message):
+    if message.from_user.id != ADMIN_ID:
+        bot.send_message(message.chat.id, "⛔️ У тебя нет доступа к статистике.")
+        return
+
+    users = get_all_users()
+    total_users = len(users)
+    today = datetime.now().date().isoformat()
+    active_today = sum(1 for u in users if u["last_active"] == today)
+
+    bot.send_message(message.chat.id,
+        f"📊 <b>Статистика</b>:\n"
+        f"👥 Всего пользователей: <b>{total_users}</b>\n"
+        f"✅ Активны сегодня: <b>{active_today}</b>",
+        parse_mode="HTML"
+    )
+
 
 # === Планировщик ===
 
 def send_daily_horoscopes():
     users = get_all_users()
     for user in users:
+        if not user["sign"]:
+            continue
         tip = generate_advice(user["sign"])
         try:
             bot.send_message(user["chat_id"], f"🌞 Доброе утро!\n\n{tip}")
@@ -148,6 +171,8 @@ def run_scheduler():
 
 import threading
 threading.Thread(target=run_scheduler).start()
+
 bot.polling()
+
 
 
