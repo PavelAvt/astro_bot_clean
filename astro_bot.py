@@ -14,7 +14,7 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 CHANNEL_LINK = "https://t.me/+lqPB3ppoz7EzMWFi"
 CHANNEL_NAME = "Астрологинеss"
-ADMIN_ID = YOUR_TELEGRAM_ID  # ← Замени на свой Telegram ID
+ADMIN_ID = 5197052541  # ← Замени на свой Telegram ID
 
 bot = telebot.TeleBot(BOT_TOKEN)
 openai_client = OpenAI(api_key=OPENAI_API_KEY)
