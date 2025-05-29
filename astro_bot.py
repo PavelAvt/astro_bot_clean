@@ -8,7 +8,7 @@ import time
 from skyfield.api import load
 from database import init_db, add_user, get_all_users, update_user_activity, set_user_sign
 
-# === Инициализация БД ===
+# === Инициализация базы ===
 init_db()
 
 # === Настройки ===
@@ -21,6 +21,7 @@ ADMIN_IDS = [5197052541, 673687798]
 bot = telebot.TeleBot(BOT_TOKEN)
 openai_client = OpenAI(api_key=OPENAI_API_KEY)
 user_data = {}
+natal_steps = {}
 
 zodiac_signs = [
     "Овен", "Телец", "Близнецы", "Рак", "Лев", "Дева",
@@ -36,6 +37,7 @@ zodiac_emojis = {
 menu = ReplyKeyboardMarkup(resize_keyboard=True)
 for sign in zodiac_signs:
     menu.add(KeyboardButton(sign))
+menu.add(KeyboardButton("🪐 По натальной карте"))
 
 
 # === Астрология: фаза и знак Луны ===
@@ -66,13 +68,10 @@ def get_moon_data():
         phase = "Последняя четверть"
 
     lon = moon.ecliptic_latlon()[1].degrees
-    moon_signs = zodiac_signs
-    moon_sign = moon_signs[int(lon // 30)]
+    moon_sign = zodiac_signs[int(lon // 30)]
 
     return phase, moon_sign
 
-
-# === Генерация прогноза ===
 
 def generate_advice(sign):
     moon_phase, moon_sign = get_moon_data()
@@ -98,13 +97,33 @@ def generate_advice(sign):
         return "⚠️ Не удалось получить прогноз."
 
 
-# === Telegram-хендлеры ===
+def generate_natal_analysis(birth_date, birth_time, city):
+    prompt = (
+        f"Ты — профессиональный астролог. Проанализируй натальную карту человека, "
+        f"родившегося {birth_date} в {birth_time} в городе {city}. "
+        f"Опиши положение Солнца, Луны, Меркурия и Марса и то, как они влияют на личность. "
+        f"Сделай вывод: сильные и слабые стороны характера. Пиши подробно, красиво, 5–7 абзацев, "
+        f"как будто делаешь личную консультацию."
+    )
+    try:
+        response = openai_client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": prompt}]
+        )
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        print("GPT ошибка:", e)
+        return "⚠️ Не удалось получить натальный прогноз."
+
+
+# === Команды и сообщения ===
 
 @bot.message_handler(commands=["start"])
 def start(message):
     chat_id = message.chat.id
     add_user(chat_id)
     bot.send_message(chat_id, "Привет! Выбери свой знак зодиака ✨", reply_markup=menu)
+
 
 @bot.message_handler(func=lambda msg: msg.text in zodiac_signs)
 def zodiac_handler(message):
@@ -115,7 +134,7 @@ def zodiac_handler(message):
     set_user_sign(chat_id, sign)
     update_user_activity(chat_id, today)
 
-    if chat_id in user_data and user_data[chat_id]["date"] == today:
+    if chat_id in user_data and user_data[chat_id].get("date") == today:
         bot.send_message(chat_id,
             f"🔁 Ты уже получил свой прогноз на сегодня!\nПодписывайся на <a href=\"{CHANNEL_LINK}\">{CHANNEL_NAME}</a>",
             parse_mode="HTML")
@@ -128,6 +147,53 @@ def zodiac_handler(message):
         f"{zodiac_emojis[sign]} <b>Прогноз для {sign}:</b>\n\n{tip}\n\n🔮 Подписывайся на <a href=\"{CHANNEL_LINK}\">{CHANNEL_NAME}</a>",
         parse_mode="HTML"
     )
+
+
+@bot.message_handler(func=lambda msg: msg.text == "🪐 По натальной карте")
+def natal_start(message):
+    chat_id = message.chat.id
+    today = datetime.now().date().isoformat()
+
+    if chat_id in user_data and user_data[chat_id].get("natal_date") == today:
+        bot.send_message(chat_id,
+            f"🔁 Ты уже получил свой прогноз на сегодня!\nПодписывайся на <a href=\"{CHANNEL_LINK}\">{CHANNEL_NAME}</a>",
+            parse_mode="HTML")
+        return
+
+    natal_steps[chat_id] = {"step": "date", "data": {}}
+    bot.send_message(chat_id, "📅 Введи дату рождения (ДД.ММ.ГГГГ):")
+
+
+@bot.message_handler(func=lambda msg: msg.chat.id in natal_steps)
+def natal_process(message):
+    chat_id = message.chat.id
+    state = natal_steps[chat_id]
+    step = state["step"]
+
+    if step == "date":
+        state["data"]["birth_date"] = message.text
+        state["step"] = "time"
+        bot.send_message(chat_id, "🕒 Введи время рождения (ЧЧ:ММ):")
+    elif step == "time":
+        state["data"]["birth_time"] = message.text
+        state["step"] = "city"
+        bot.send_message(chat_id, "📍 Введи город рождения:")
+    elif step == "city":
+        state["data"]["city"] = message.text
+        birth_date = state["data"]["birth_date"]
+        birth_time = state["data"]["birth_time"]
+        city = state["data"]["city"]
+        user_data[chat_id] = {"natal_date": datetime.now().date().isoformat()}
+
+        add_user(chat_id, birth_date, birth_time, 0.0, 0.0, city, None)
+        tip = generate_natal_analysis(birth_date, birth_time, city)
+
+        bot.send_message(chat_id,
+            f"📜 <b>Натальная карта:</b>\n\n{tip}\n\n🔮 Подписывайся на <a href=\"{CHANNEL_LINK}\">{CHANNEL_NAME}</a>",
+            parse_mode="HTML"
+        )
+        natal_steps.pop(chat_id, None)
+
 
 @bot.message_handler(commands=["stats"])
 def stats(message):
@@ -148,7 +214,7 @@ def stats(message):
     )
 
 
-# === Планировщик ===
+# === Рассылка прогноза по расписанию ===
 
 def send_daily_horoscopes():
     users = get_all_users()
