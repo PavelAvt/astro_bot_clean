@@ -7,17 +7,14 @@ import requests
 import schedule
 import time
 from skyfield.api import load
-from database import init_db, add_user, get_all_users, update_user_activity, set_user_sign
-
-# === Инициализация базы ===
-init_db()  # создаёт таблицу users при первом запуске
+from database import add_user, get_all_users, update_user_activity, set_user_sign
 
 # === Настройки ===
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 CHANNEL_LINK = "https://t.me/+lqPB3ppoz7EzMWFi"
 CHANNEL_NAME = "Астрологинеss"
-ADMIN_IDS = [5197052541, 673687798]  # список Telegram ID с доступом к /stats
+ADMIN_ID = YOUR_TELEGRAM_ID  # ← Замени на свой Telegram ID
 
 bot = telebot.TeleBot(BOT_TOKEN)
 openai_client = OpenAI(api_key=OPENAI_API_KEY)
@@ -73,8 +70,9 @@ def get_moon_sign():
     observer = earth.at(t).observe(moon).apparent()
     lon = observer.ecliptic_latlon()[1].degrees
 
+    signs = zodiac_signs
     index = int(lon // 30)
-    return zodiac_signs[index]
+    return signs[index]
 
 
 # === Генерация совета ===
@@ -106,7 +104,7 @@ def generate_advice(sign):
 @bot.message_handler(commands=["start"])
 def start(message):
     chat_id = message.chat.id
-    add_user(chat_id)  # остальные данные будут добавлены позже
+    add_user(chat_id, message.from_user.username, message.from_user.first_name)
     bot.send_message(chat_id, "Привет! Выбери свой знак зодиака ✨", reply_markup=menu)
 
 @bot.message_handler(func=lambda msg: msg.text in zodiac_signs)
@@ -134,7 +132,7 @@ def zodiac_handler(message):
 
 @bot.message_handler(commands=["stats"])
 def stats(message):
-    if message.from_user.id not in ADMIN_IDS:
+    if message.from_user.id != ADMIN_ID:
         bot.send_message(message.chat.id, "⛔️ У тебя нет доступа к статистике.")
         return
 
@@ -175,6 +173,7 @@ import threading
 threading.Thread(target=run_scheduler).start()
 
 bot.polling()
+
 
 
 
