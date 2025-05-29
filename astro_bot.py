@@ -3,18 +3,20 @@ import telebot
 from telebot.types import ReplyKeyboardMarkup, KeyboardButton
 from openai import OpenAI
 from datetime import datetime
-import requests
 import schedule
 import time
 from skyfield.api import load
-from database import add_user, get_all_users, update_user_activity, set_user_sign
+from database import init_db, add_user, get_all_users, update_user_activity, set_user_sign
+
+# === Инициализация БД ===
+init_db()
 
 # === Настройки ===
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 CHANNEL_LINK = "https://t.me/+lqPB3ppoz7EzMWFi"
 CHANNEL_NAME = "Астрологинеss"
-ADMIN_ID = 5197052541  # ← Замени на свой Telegram ID
+ADMIN_IDS = [5197052541, 673687798]
 
 bot = telebot.TeleBot(BOT_TOKEN)
 openai_client = OpenAI(api_key=OPENAI_API_KEY)
@@ -36,56 +38,53 @@ for sign in zodiac_signs:
     menu.add(KeyboardButton(sign))
 
 
-# === Астрология ===
+# === Астрология: фаза и знак Луны ===
 
-def get_moon_phase():
+def get_moon_data():
     ts = load.timescale()
     t = ts.now()
     eph = load('de421.bsp')
     e = eph['earth'].at(t)
+
     sun = e.observe(eph['sun']).apparent()
     moon = e.observe(eph['moon']).apparent()
+
     phase_angle = sun.separation_from(moon).degrees
-
     if phase_angle < 45:
-        return "Новолуние"
+        phase = "Новолуние"
     elif phase_angle < 90:
-        return "Растущая луна"
+        phase = "Растущая Луна"
     elif phase_angle < 135:
-        return "Первая четверть"
+        phase = "Первая четверть"
     elif phase_angle < 180:
-        return "Почти полнолуние"
+        phase = "Почти полнолуние"
     elif phase_angle < 225:
-        return "Полнолуние"
+        phase = "Полнолуние"
     elif phase_angle < 270:
-        return "Убывающая луна"
+        phase = "Убывающая Луна"
     else:
-        return "Последняя четверть"
+        phase = "Последняя четверть"
 
-def get_moon_sign():
-    ts = load.timescale()
-    t = ts.now()
-    eph = load('de421.bsp')
-    earth, moon = eph['earth'], eph['moon']
-    observer = earth.at(t).observe(moon).apparent()
-    lon = observer.ecliptic_latlon()[1].degrees
+    lon = moon.ecliptic_latlon()[1].degrees
+    moon_signs = zodiac_signs
+    moon_sign = moon_signs[int(lon // 30)]
 
-    signs = zodiac_signs
-    index = int(lon // 30)
-    return signs[index]
+    return phase, moon_sign
 
 
-# === Генерация совета ===
+# === Генерация прогноза ===
 
 def generate_advice(sign):
-    moon_phase = get_moon_phase()
-    moon_sign = get_moon_sign()
+    moon_phase, moon_sign = get_moon_data()
+    date_str = datetime.now().strftime("%d.%m.%Y")
 
     prompt = (
-        f"Ты — опытный астролог. Сегодня {datetime.now().strftime('%d.%m.%Y')}. "
-        f"Фаза Луны: {moon_phase}. Луна в знаке {moon_sign}. "
-        f"Составь мудрый, вдохновляющий и краткий совет для знака {sign} (3–4 предложения), "
-        f"учитывая эмоциональный фон дня. Пиши легко, понятно и красиво."
+        f"Ты — опытный астролог. Сегодня {date_str}. "
+        f"Фаза Луны: {moon_phase}, Луна в знаке: {moon_sign}. "
+        f"Составь настоящий астрологический прогноз на день для знака {sign}. "
+        f"Прогноз должен быть основан на лунной фазе, лунном знаке и особенностях знака {sign}. "
+        f"Пиши конкретно, по существу, не слишком обобщённо и не слишком длинно — 3–5 предложений. "
+        f"Стиль: как у профессионального астролога, без повторов и лишнего."
     )
 
     try:
@@ -96,15 +95,15 @@ def generate_advice(sign):
         return response.choices[0].message.content.strip()
     except Exception as e:
         print("GPT ошибка:", e)
-        return "⚠️ Не удалось получить совет."
+        return "⚠️ Не удалось получить прогноз."
 
 
-# === Хендлеры ===
+# === Telegram-хендлеры ===
 
 @bot.message_handler(commands=["start"])
 def start(message):
     chat_id = message.chat.id
-    add_user(chat_id, message.from_user.username, message.from_user.first_name)
+    add_user(chat_id)
     bot.send_message(chat_id, "Привет! Выбери свой знак зодиака ✨", reply_markup=menu)
 
 @bot.message_handler(func=lambda msg: msg.text in zodiac_signs)
@@ -118,7 +117,7 @@ def zodiac_handler(message):
 
     if chat_id in user_data and user_data[chat_id]["date"] == today:
         bot.send_message(chat_id,
-            f"🔁 Ты уже получил свой совет на сегодня!\nПодписывайся на <a href=\"{CHANNEL_LINK}\">{CHANNEL_NAME}</a>",
+            f"🔁 Ты уже получил свой прогноз на сегодня!\nПодписывайся на <a href=\"{CHANNEL_LINK}\">{CHANNEL_NAME}</a>",
             parse_mode="HTML")
         return
 
@@ -126,13 +125,13 @@ def zodiac_handler(message):
     user_data[chat_id] = {"sign": sign, "date": today}
 
     bot.send_message(chat_id,
-        f"{zodiac_emojis[sign]} <b>Совет для {sign}:</b>\n\n{tip}\n\n🔮 Подписывайся на <a href=\"{CHANNEL_LINK}\">{CHANNEL_NAME}</a>",
+        f"{zodiac_emojis[sign]} <b>Прогноз для {sign}:</b>\n\n{tip}\n\n🔮 Подписывайся на <a href=\"{CHANNEL_LINK}\">{CHANNEL_NAME}</a>",
         parse_mode="HTML"
     )
 
 @bot.message_handler(commands=["stats"])
 def stats(message):
-    if message.from_user.id != ADMIN_ID:
+    if message.from_user.id not in ADMIN_IDS:
         bot.send_message(message.chat.id, "⛔️ У тебя нет доступа к статистике.")
         return
 
@@ -173,6 +172,7 @@ import threading
 threading.Thread(target=run_scheduler).start()
 
 bot.polling()
+
 
 
 
