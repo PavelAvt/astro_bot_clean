@@ -13,6 +13,7 @@ from database import add_user, get_all_users, update_user_activity, set_user_sig
 # === Настройки ===
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+OPENCAGE_API_KEY = os.getenv("OPENCAGE_API_KEY")
 CHANNEL_LINK = "https://t.me/+lqPB3ppoz7EzMWFi"
 CHANNEL_NAME = "Астрологинеss"
 ADMIN_ID = [5197052541, 673687798]
@@ -39,8 +40,7 @@ menu.add(KeyboardButton("🪐 По натальной карте"))
 
 # === Геокодинг ===
 def get_coordinates_by_city(city_name):
-    api_key = os.getenv("OPENCAGE_API_KEY")
-    url = f"https://api.opencagedata.com/geocode/v1/json?q={city_name}&key={api_key}&language=ru"
+    url = f"https://api.opencagedata.com/geocode/v1/json?q={city_name}&key={OPENCAGE_API_KEY}&language=ru"
     try:
         response = requests.get(url)
         data = response.json()
@@ -54,16 +54,14 @@ def get_coordinates_by_city(city_name):
         print("Ошибка геокодинга:", e)
         return None, None
 
-# === Астрология с Swiss Ephemeris ===
+# === Swiss Ephemeris ===
 swe.set_ephe_path("ephe")
 PLANETS = {
     'Солнце': swe.SUN, 'Луна': swe.MOON, 'Меркурий': swe.MERCURY,
     'Венера': swe.VENUS, 'Марс': swe.MARS, 'Юпитер': swe.JUPITER, 'Сатурн': swe.SATURN
 }
-ASPECTS = {
-    'Соединение': 0, 'Оппозиция': 180, 'Трин': 120,
-    'Квадрат': 90, 'Секстиль': 60
-}
+ASPECTS = {'Соединение': 0, 'Оппозиция': 180, 'Трин': 120, 'Квадрат': 90, 'Секстиль': 60}
+
 def deg_diff(a, b):
     diff = abs(a - b) % 360
     return min(diff, 360 - diff)
@@ -105,8 +103,7 @@ def generate_natal_analysis(birth_date, birth_time, city):
     prompt = (
         f"Ты — профессиональный астролог. Клиент родился {birth_date} в {birth_time} в городе {city} "
         f"(широта: {lat}, долгота: {lon}). Сегодня {today}. Вот транзиты:\n{aspect_text}\n"
-        f"Поясни, как это повлияет на его день: эмоции, энергия, отношения, действия. "
-        f"Сделай красивый прогноз на 3–5 абзацев, как личную консультацию."
+        f"Поясни, как это повлияет на его день. Сделай красивый прогноз на 3–5 абзацев, как личную консультацию."
     )
     try:
         response = openai_client.chat.completions.create(
@@ -118,7 +115,7 @@ def generate_natal_analysis(birth_date, birth_time, city):
         print("GPT ошибка:", e)
         return "⚠️ Не удалось получить астропрогноз."
 
-# === Хендлеры ===
+# === Обработчики ===
 @bot.message_handler(commands=["start"])
 def start(message):
     chat_id = message.chat.id
@@ -152,16 +149,13 @@ def natal_city(message):
 
     if chat_id in user_data and user_data[chat_id].get("natal_date") == today:
         bot.send_message(chat_id,
-            f"🔁 Ты уже получил свою натальную карту на сегодня!
-Подписывайся на <a href=\"{CHANNEL_LINK}\">{CHANNEL_NAME}</a>",
+            f'🔁 Ты уже получил свою натальную карту на сегодня!\nПодписывайся на <a href="{CHANNEL_LINK}">{CHANNEL_NAME}</a>',
             parse_mode="HTML")
         return
 
     tip = generate_natal_analysis(birth_date, birth_time, city)
     user_data[chat_id] = {"natal_date": today}
-    bot.send_message(chat_id, f"🪐 <b>Натальная карта на сегодня:</b>
-
-{tip}", parse_mode="HTML")
+    bot.send_message(chat_id, f"🪐 <b>Натальная карта на сегодня:</b>\n\n{tip}", parse_mode="HTML")
 
 @bot.message_handler(func=lambda msg: msg.text in zodiac_signs)
 def zodiac_handler(message):
@@ -172,13 +166,12 @@ def zodiac_handler(message):
     update_user_activity(chat_id, today)
     if chat_id in user_data and user_data[chat_id].get("date") == today:
         bot.send_message(chat_id,
-            f"🔁 Ты уже получил свой совет на сегодня!
-Подписывайся на <a href=\"{CHANNEL_LINK}\">{CHANNEL_NAME}</a>",
+            f'🔁 Ты уже получил свой прогноз на сегодня!\nПодписывайся на <a href="{CHANNEL_LINK}">{CHANNEL_NAME}</a>',
             parse_mode="HTML")
         return
     prompt = (
         f"Ты — опытный астролог. Сегодня {datetime.now().strftime('%d.%m.%Y')}. "
-        f"Составь мудрый, вдохновляющий совет для знака {sign} на 3–4 предложения, учитывая эмоциональный фон дня."
+        f"Составь краткий и мудрый прогноз на день для знака {sign}, учитывая эмоциональный фон дня."
     )
     try:
         response = openai_client.chat.completions.create(
@@ -189,9 +182,7 @@ def zodiac_handler(message):
     except:
         tip = "⚠️ Не удалось получить совет."
     user_data[chat_id] = {"sign": sign, "date": today}
-    bot.send_message(chat_id, f"{zodiac_emojis[sign]} <b>Совет для {sign}:</b>
-
-{tip}", parse_mode="HTML")
+    bot.send_message(chat_id, f"{zodiac_emojis[sign]} <b>Совет для {sign}:</b>\n\n{tip}", parse_mode="HTML")
 
 @bot.message_handler(commands=["stats"])
 def stats(message):
@@ -202,9 +193,7 @@ def stats(message):
     total = len(users)
     today = datetime.now().date().isoformat()
     active_today = sum(1 for u in users if u["last_active"] == today)
-    bot.send_message(message.chat.id, f"📊 Статистика:
-👥 Всего: {total}
-✅ Активны сегодня: {active_today}", parse_mode="HTML")
+    bot.send_message(message.chat.id, f"📊 Статистика:\n👥 Всего: {total}\n✅ Активны сегодня: {active_today}", parse_mode="HTML")
 
 # === Планировщик ===
 def send_daily_horoscopes():
@@ -212,19 +201,14 @@ def send_daily_horoscopes():
     for user in users:
         if not user["sign"]:
             continue
-        prompt = (
-            f"Ты — астролог. Сегодня {datetime.now().strftime('%d.%m.%Y')}. "
-            f"Составь короткий позитивный совет для знака {user['sign']}."
-        )
+        prompt = f"Ты — астролог. Сегодня {datetime.now().strftime('%d.%m.%Y')}. Составь короткий совет для знака {user['sign']}."
         try:
             response = openai_client.chat.completions.create(
                 model="gpt-3.5-turbo",
                 messages=[{"role": "user", "content": prompt}]
             )
             tip = response.choices[0].message.content.strip()
-            bot.send_message(user["chat_id"], f"🌞 Доброе утро!
-
-{tip}")
+            bot.send_message(user["chat_id"], f"🌞 Доброе утро!\n\n{tip}")
         except Exception as e:
             print(f"Ошибка отправки {user['chat_id']}: {e}")
 
@@ -238,3 +222,4 @@ def run_scheduler():
 import threading
 threading.Thread(target=run_scheduler).start()
 bot.polling()
+
