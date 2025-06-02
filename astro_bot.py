@@ -23,15 +23,9 @@ user_data = {}
 user_steps = {}
 
 # === Кнопки ===
-zodiac_signs = [
-    "Овен", "Телец", "Близнецы", "Рак", "Лев", "Дева",
-    "Весы", "Скорпион", "Стрелец", "Козерог", "Водолей", "Рыбы"
-]
-zodiac_emojis = {
-    "Овен": "♈️", "Телец": "♉️", "Близнецы": "♊️", "Рак": "♋️",
-    "Лев": "♌️", "Дева": "♍️", "Весы": "♎️", "Скорпион": "♏️",
-    "Стрелец": "♐️", "Козерог": "♑️", "Водолей": "♒️", "Рыбы": "♓️"
-}
+zodiac_signs = ["Овен", "Телец", "Близнецы", "Рак", "Лев", "Дева", "Весы", "Скорпион", "Стрелец", "Козерог", "Водолей", "Рыбы"]
+zodiac_emojis = {"Овен": "♈️", "Телец": "♉️", "Близнецы": "♊️", "Рак": "♋️", "Лев": "♌️", "Дева": "♍️", "Весы": "♎️", "Скорпион": "♏️",
+                 "Стрелец": "♐️", "Козерог": "♑️", "Водолей": "♒️", "Рыбы": "♓️"}
 menu = ReplyKeyboardMarkup(resize_keyboard=True)
 for sign in zodiac_signs:
     menu.add(KeyboardButton(sign))
@@ -39,14 +33,14 @@ menu.add(KeyboardButton("🪐 По натальной карте"))
 
 # === Геолокация ===
 def get_coordinates_by_city(city_name):
-    url = f"https://api.opencagedata.com/geocode/v1/json?q={city_name}&key={OPENCAGE_API_KEY}&language=ru"
     try:
-        r = requests.get(url)
+        url = f"https://api.opencagedata.com/geocode/v1/json?q={city_name}&key={OPENCAGE_API_KEY}&language=ru"
+        r = requests.get(url, timeout=10)
         data = r.json()
         if data["results"]:
             return data["results"][0]["geometry"]["lat"], data["results"][0]["geometry"]["lng"]
-    except:
-        pass
+    except Exception as e:
+        print("Geo error:", e)
     return None, None
 
 # === Астрология ===
@@ -56,7 +50,6 @@ PLANETS = {
     'Венера': swe.VENUS, 'Марс': swe.MARS, 'Юпитер': swe.JUPITER, 'Сатурн': swe.SATURN
 }
 ASPECTS = {'Соединение': 0, 'Оппозиция': 180, 'Трин': 120, 'Квадрат': 90, 'Секстиль': 60}
-
 def deg_diff(a, b):
     d = abs(a - b) % 360
     return min(d, 360 - d)
@@ -80,20 +73,16 @@ def get_transits(birth_date, birth_time, lat, lon):
     for name, code in PLANETS.items():
         lonlatdist, _ = swe.calc_ut(jd_birth, code)
         lon = lonlatdist[0]
-        lat_ = lonlatdist[1] if len(lonlatdist) > 1 else 0
-        dist = lonlatdist[2] if len(lonlatdist) > 2 else 0
-        natal[name] = {"lon": lon, "lat": lat_, "dist": dist}
+        natal[name] = lon
 
         lonlatdist_tr, _ = swe.calc_ut(jd_now, code)
         lon_tr = lonlatdist_tr[0]
-        lat_tr = lonlatdist_tr[1] if len(lonlatdist_tr) > 1 else 0
-        dist_tr = lonlatdist_tr[2] if len(lonlatdist_tr) > 2 else 0
-        transit[name] = {"lon": lon_tr, "lat": lat_tr, "dist": dist_tr}
+        transit[name] = lon_tr
 
     result = []
-    for t_name, t_pos in transit.items():
-        for n_name, n_pos in natal.items():
-            angle = deg_diff(t_pos["lon"], n_pos["lon"])
+    for t_name, t_lon in transit.items():
+        for n_name, n_lon in natal.items():
+            angle = deg_diff(t_lon, n_lon)
             asp = find_aspect(angle)
             if asp:
                 result.append(f"{t_name} {asp} к натальному {n_name} ({round(angle,1)}°)")
@@ -160,7 +149,9 @@ def get_city(msg):
 
     tip = generate_natal_analysis(birth_date, birth_time, city)
     user_data[chat_id] = {"natal_date": today}
-    bot.send_message(chat_id, f"🪐 <b>Натальная карта на сегодня:</b>\n\n{tip}", parse_mode="HTML")
+    bot.send_message(chat_id,
+        f"🪐 <b>Натальная карта на сегодня:</b>\n\n{tip}\n\n🔮 Подписывайся на <a href=\"{CHANNEL_LINK}\">{CHANNEL_NAME}</a>",
+        parse_mode="HTML")
     user_steps.pop(chat_id)
 
 @bot.message_handler(func=lambda msg: msg.text in zodiac_signs)
@@ -184,7 +175,9 @@ def zodiac_handler(msg):
     except:
         tip = "⚠️ Не удалось получить прогноз."
     user_data[chat_id] = {"date": today}
-    bot.send_message(chat_id, f"{zodiac_emojis[msg.text]} <b>Совет для {msg.text}:</b>\n\n{tip}", parse_mode="HTML")
+    bot.send_message(chat_id,
+        f"{zodiac_emojis[msg.text]} <b>Совет для {msg.text}:</b>\n\n{tip}\n\n🔮 Подписывайся на <a href=\"{CHANNEL_LINK}\">{CHANNEL_NAME}</a>",
+        parse_mode="HTML")
 
 @bot.message_handler(commands=["stats"])
 def stats(message):
