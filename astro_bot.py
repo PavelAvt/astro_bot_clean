@@ -37,7 +37,7 @@ for sign in zodiac_signs:
     menu.add(KeyboardButton(sign))
 menu.add(KeyboardButton("🪐 По натальной карте"))
 
-# === Геокодинг ===
+# === Геолокация ===
 def get_coordinates_by_city(city_name):
     url = f"https://api.opencagedata.com/geocode/v1/json?q={city_name}&key={OPENCAGE_API_KEY}&language=ru"
     try:
@@ -45,10 +45,11 @@ def get_coordinates_by_city(city_name):
         data = r.json()
         if data["results"]:
             return data["results"][0]["geometry"]["lat"], data["results"][0]["geometry"]["lng"]
-    except: pass
+    except:
+        pass
     return None, None
 
-# === Swiss Ephemeris ===
+# === Астрология ===
 swe.set_ephe_path("ephe")
 PLANETS = {
     'Солнце': swe.SUN, 'Луна': swe.MOON, 'Меркурий': swe.MERCURY,
@@ -77,10 +78,17 @@ def get_transits(birth_date, birth_time, lat, lon):
     transit = {}
 
     for name, code in PLANETS.items():
-        lon, lat_, dist = swe.calc_ut(jd_birth, code)
+        lonlatdist, _ = swe.calc_ut(jd_birth, code)
+        lon = lonlatdist[0]
+        lat_ = lonlatdist[1] if len(lonlatdist) > 1 else 0
+        dist = lonlatdist[2] if len(lonlatdist) > 2 else 0
         natal[name] = {"lon": lon, "lat": lat_, "dist": dist}
-        lon, lat_, dist = swe.calc_ut(jd_now, code)
-        transit[name] = {"lon": lon, "lat": lat_, "dist": dist}
+
+        lonlatdist_tr, _ = swe.calc_ut(jd_now, code)
+        lon_tr = lonlatdist_tr[0]
+        lat_tr = lonlatdist_tr[1] if len(lonlatdist_tr) > 1 else 0
+        dist_tr = lonlatdist_tr[2] if len(lonlatdist_tr) > 2 else 0
+        transit[name] = {"lon": lon_tr, "lat": lat_tr, "dist": dist_tr}
 
     result = []
     for t_name, t_pos in transit.items():
@@ -101,9 +109,9 @@ def generate_natal_analysis(birth_date, birth_time, city):
         return f"Сегодня, {today}, нет значимых транзитов."
     text = '\n'.join(f"• {a}" for a in aspects)
     prompt = (
-        f"Ты — профессиональный астролог. Клиент родился {birth_date} в {birth_time} в городе {city}. "
+        f"Ты — астролог. Клиент родился {birth_date} в {birth_time} в городе {city}. "
         f"Сегодня {today}. Аспекты:\n{text}\n"
-        f"Составь тёплый, глубокий прогноз как для клиента на личной консультации."
+        f"Составь подробный прогноз в стиле личной консультации."
     )
     try:
         response = openai_client.chat.completions.create(
@@ -115,11 +123,11 @@ def generate_natal_analysis(birth_date, birth_time, city):
         print(e)
         return "⚠️ Не удалось получить прогноз."
 
-# === Обработчики ===
+# === Хендлеры ===
 @bot.message_handler(commands=["start"])
 def start(message):
     add_user(message.chat.id)
-    bot.send_message(message.chat.id, "Привет! Выбери знак зодиака или натальную карту ✨", reply_markup=menu)
+    bot.send_message(message.chat.id, "Привет! Выбери знак зодиака или рассчитай натальную карту ✨", reply_markup=menu)
 
 @bot.message_handler(func=lambda msg: msg.text == "🪐 По натальной карте")
 def start_natal(msg):
@@ -214,5 +222,6 @@ import threading
 init_db()
 threading.Thread(target=run_scheduler).start()
 bot.polling()
+
 
 
