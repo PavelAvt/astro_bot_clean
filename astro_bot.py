@@ -24,12 +24,18 @@ user_steps = {}
 
 # === Кнопки ===
 zodiac_signs = ["Овен", "Телец", "Близнецы", "Рак", "Лев", "Дева", "Весы", "Скорпион", "Стрелец", "Козерог", "Водолей", "Рыбы"]
-zodiac_emojis = {"Овен": "♈️", "Телец": "♉️", "Близнецы": "♊️", "Рак": "♋️", "Лев": "♌️", "Дева": "♍️", "Весы": "♎️", "Скорпион": "♏️",
-                 "Стрелец": "♐️", "Козерог": "♑️", "Водолей": "♒️", "Рыбы": "♓️"}
+zodiac_emojis = {
+    "Овен": "♈️", "Телец": "♉️", "Близнецы": "♊️", "Рак": "♋️", "Лев": "♌️", "Дева": "♍️",
+    "Весы": "♎️", "Скорпион": "♏️", "Стрелец": "♐️", "Козерог": "♑️", "Водолей": "♒️", "Рыбы": "♓️"
+}
+
 menu = ReplyKeyboardMarkup(resize_keyboard=True)
+menu.add(KeyboardButton("🪐 По натальной карте"))
 for sign in zodiac_signs:
     menu.add(KeyboardButton(sign))
-menu.add(KeyboardButton("🪐 По натальной карте"))
+
+start_menu = ReplyKeyboardMarkup(resize_keyboard=True)
+start_menu.add(KeyboardButton("🚀 Начать"))
 
 # === Геолокация ===
 def get_coordinates_by_city(city_name):
@@ -116,7 +122,11 @@ def generate_natal_analysis(birth_date, birth_time, city):
 @bot.message_handler(commands=["start"])
 def start(message):
     add_user(message.chat.id)
-    bot.send_message(message.chat.id, "Привет! Выбери знак зодиака или рассчитай натальную карту ✨", reply_markup=menu)
+    bot.send_message(message.chat.id, "Привет 👋\nНажми кнопку «🚀 Начать», чтобы продолжить:", reply_markup=start_menu)
+
+@bot.message_handler(func=lambda msg: msg.text == "🚀 Начать")
+def handle_start_button(msg):
+    bot.send_message(msg.chat.id, "Выбери знак зодиака или рассчитай натальную карту ✨", reply_markup=menu)
 
 @bot.message_handler(func=lambda msg: msg.text == "🪐 По натальной карте")
 def start_natal(msg):
@@ -215,6 +225,4 @@ import threading
 init_db()
 threading.Thread(target=run_scheduler).start()
 bot.polling()
-
-
 
